@@ -3,63 +3,63 @@
 #include <vector>
 
 enum class Mode {
-	NORMAL,
-	INSERT,
-	VISUAL,
-	EXIT
+    NORMAL,
+    INSERT,
+    VISUAL,
+    EXIT
 };
 
 struct Line : std::vector<char> {
-	size_t size() {
-		return std::ranges::count_if(*this, [](char ch){ return ch != '\n'; });
-	}
+    size_t size() {
+        return std::ranges::count_if(*this, [](char ch){ return ch != '\n'; });
+    }
 };
 
 using Id = uint8_t;
 class Buffer {
-	static inline Id sId = 0;
-	
-	Id _id;
-	std::string _logHandle;
+    static inline Id sId = 0;
 
-	// Text
-	std::vector<std::shared_ptr<Line>> _lines;
-	std::shared_ptr<Line> _currentLine;
+    Id _id;
+    std::string _logHandle;
 
-	// Current position
-	size_t _y = 0;
-	size_t _x = 0;
+    // Text
+    std::vector<std::shared_ptr<Line>> _lines;
+    std::shared_ptr<Line> _currentLine;
 
-	// Bounds
-	size_t _yMax;
-	size_t _xMax;
+    // Current position
+    size_t _y = 0;
+    size_t _x = 0;
 
-	Mode _mode;
+    // Bounds
+    size_t _yMax;
+    size_t _xMax;
 
-	enum class Direction: char {
-		LEFT = 'h',
-		DOWN = 'j',
-		UP = 'k',
-		RIGHT = 'l'
-	};
+    Mode _mode;
 
-	void handleNormalCmd(char ch);
+    enum class Direction: char {
+        LEFT = 'h',
+        DOWN = 'j',
+        UP = 'k',
+        RIGHT = 'l'
+    };
 
-	void moveCursor(Direction key);
-	void insertChar(char ch);
-	void deleteChar();
-	void insertNewline();
+    void handleNormalCmd(char ch);
+
+    void moveCursor(Direction key);
+    void insertChar(char ch);
+    void deleteChar();
+    void insertNewline();
 
 public:
-	Buffer(size_t yMax, size_t xMax);
+    Buffer(size_t yMax, size_t xMax);
 
-	void handleInput(char ch);
+    void handleInput(char ch);
 
-	Id getId() const {
-		return _id;
-	}
+    Id getId() const {
+        return _id;
+    }
 
-	Mode getMode() const {
-		return _mode;
-	}
+    Mode getMode() const {
+        return _mode;
+    }
 };
