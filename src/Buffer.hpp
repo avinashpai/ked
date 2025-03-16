@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <vector>
 
 enum class Mode {
@@ -18,9 +19,11 @@ struct Line : std::vector<char> {
 using Id = uint8_t;
 class Buffer {
     static inline Id sId = 0;
-
     Id _id;
+
     std::string _logHandle;
+
+    std::optional<std::string> _filename;
 
     // Text
     std::vector<std::shared_ptr<Line>> _lines;
@@ -43,6 +46,11 @@ class Buffer {
         RIGHT = 'l'
     };
 
+    void printBuffer() const;
+
+    void loadFromFile();
+    bool saveToFile() const;
+
     void handleNormalCmd(char ch);
 
     void moveCursor(Direction key);
@@ -51,7 +59,7 @@ class Buffer {
     void insertNewline();
 
 public:
-    Buffer(size_t yMax, size_t xMax);
+    Buffer(size_t yMax, size_t xMax, std::optional<std::string> filename = std::nullopt) ;
 
     void handleInput(char ch);
 

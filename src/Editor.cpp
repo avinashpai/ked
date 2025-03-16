@@ -1,16 +1,22 @@
 #include "Editor.hpp"
 
 
-Editor::Editor(size_t yMax, size_t xMax) : _yMax(yMax), _xMax(xMax) {
-    _buffers = { std::shared_ptr<Buffer>(new Buffer(_yMax, _xMax)) };
-    _activeBuf = _buffers.front();
-}
-
-void Editor::start() {
+Editor::Editor(size_t yMax, size_t xMax, std::optional<std::string> fileOrDir) : _yMax(yMax), _xMax(xMax) {
     initscr();
     raw();
     noecho();
 
+    _buffers = { std::shared_ptr<Buffer>(new Buffer(_yMax, _xMax, fileOrDir)) };
+    _activeBuf = _buffers.front();
+
+    refresh();
+}
+
+Editor::~Editor() {
+    endwin();
+}
+
+void Editor::start() {
     while (true) {
         // TODO: Buffer switching
 

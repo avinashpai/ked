@@ -1,19 +1,65 @@
 #include <ncurses.h>
 
+#include <filesystem>
 #include <format>
 
 #include "Buffer.hpp"
 #include "Log.hpp"
 
-extern Log logger;
-// this is a test.
 
-Buffer::Buffer(size_t yMax, size_t xMax) : _yMax(yMax), _xMax(xMax), _mode(Mode::NORMAL) {
+Buffer::Buffer(size_t yMax, size_t xMax, std::optional<std::string> filename): _yMax(yMax), _xMax(xMax), _mode(Mode::NORMAL) {
     _id = Buffer::sId++;
     _logHandle = std::format("Buffer ({})", _id);
 
-    _lines = { std::shared_ptr<Line>(new Line) };
+    if (filename.has_value()) {
+        _filename = std::move(filename);
+        loadFromFile();
+    }
+
+    if (_lines.empty()) {
+        _lines = { std::shared_ptr<Line>(new Line) };
+    }
     _currentLine = _lines[0];
+}
+
+void Buffer::loadFromFile() {
+    if (!std::filesystem::exists(*_filename)) { return; }
+
+    if (std::filesystem::is_directory(*_filename)) {
+        // TODO: Directory explorer
+        Log::info(_logHandle, std::format("{} is a directory -- to be implemented!", *_filename));
+        return;
+    }
+
+    std::ifstream input(*_filename);
+    size_t i = 0;
+    for (std::string line; std::getline(input, line); i++) {
+        _lines.emplace_back(std::shared_ptr<Line>(new Line));
+        std::copy(line.begin(), line.end(), std::back_inserter(*_lines[i]));
+        _lines[i]->emplace_back('\n');
+    }
+    Log::info(_logHandle, std::format("Successfully loaded {}", *_filename));
+
+    printBuffer();
+    move(_y, _x);
+}
+
+bool Buffer::saveToFile() const {
+    if (!_filename.has_value()) {
+        // TODO: prompt
+        Log::err(_logHandle, "No file name!");
+        return false;
+    }
+
+    // TODO: save file
+    Log::info(_logHandle, std::format("Saved to {}", *_filename));
+    return true;
+}
+
+void Buffer::printBuffer() const {
+    for (auto line : _lines) {
+        addstr(line->data());
+    }
 }
 
 void Buffer::handleInput(char ch) {
@@ -22,23 +68,22 @@ void Buffer::handleInput(char ch) {
     switch (_mode) {
         case NORMAL:
             handleNormalCmd(ch);
-        break;
+            break;
         case INSERT:
             if (ch == 27) {
                 _mode = Mode::NORMAL;
                 moveCursor(Direction::LEFT);
-                logger.info(_logHandle, "INSERT -> NORMAL");
-                break;
+                Log::info(_logHandle, "INSERT -> NORMAL");
             } else if (ch == 127) {
                 deleteChar();
             } else {
                 insertChar(ch);
             }
-        break;
+            break;
         case VISUAL:
         case EXIT:
             _mode = EXIT;
-        break;
+            break;
     }
 }
 
@@ -48,21 +93,23 @@ void Buffer::handleNormalCmd(char ch) {
     switch (ch) {
         case 'i':
             _mode = INSERT;
-            logger.info(_logHandle, "NORMAL -> INSERT");
-        break;
+            Log::info(_logHandle, "NORMAL -> INSERT");
+            break;
+        case 's':
+            if (!saveToFile()) break;
         case 'q':
             _mode = EXIT;
-            logger.info(_logHandle, "NORMAL -> EXIT");
-        break;
+            Log::info(_logHandle, "NORMAL -> EXIT");
+            break;
         case 'h':
         case 'j':
         case 'k':
         case 'l':
             moveCursor(Direction(ch));
-        break;
+            break;
         default:
             // TODO:
-        break;
+            break;
     }
 }
 
@@ -74,32 +121,35 @@ void Buffer::moveCursor(Direction ch) {
             if (_x != 0) {
                 _x--;
             }
-        break;
+            break;
         case DOWN:
             if (_y != _yMax && _y != _lines.size() - 1) {
                 _y++;
                 _currentLine = _lines[_y];
 
-                _x = std::min(_x, _currentLine->size() - 1);
+                auto lineSize = _currentLine->size();
+                _x = lineSize == 0 ? 0 : std::min(_x, lineSize - 1);
             }
-        break;
+            break;
         case UP:
             if (_y != 0) {
                 _y--;
                 _currentLine = _lines[_y];
 
-                _x = std::min(_x, _currentLine->size() - 1);
+                auto lineSize = _currentLine->size();
+                _x = lineSize == 0 ? 0 : std::min(_x, lineSize - 1);
             }
-        break;
+            break;
         case RIGHT:
-            if (_x != _xMax && _x != _currentLine->size() - 1) {
+            auto lineSize = _currentLine->size();
+            if (_x != _xMax && lineSize != 0  && _x != lineSize - 1) {
                 _x++;
             }
-        break;
+            break;
     }
 
     move(_y, _x);
-    logger.info(_logHandle, std::format("Moving to ({}, {})", _x, _y));
+    Log::info(_logHandle, std::format("Moving to ({}, {})", _x, _y));
 }
 
 void Buffer::insertNewline() {
@@ -126,7 +176,7 @@ void Buffer::insertChar(char ch) {
     }
     _currentLine->insert(_currentLine->begin() + _x, ch);
 
-    logger.info(_logHandle, std::format("Inserting \'{}\' at ({}, {})", ch, _x, _y));
+    Log::info(_logHandle, std::format("Inserting \'{}\' at ({}, {})", ch, _x, _y));
 
     if (ch == '\n') {
         insertNewline();
@@ -138,7 +188,7 @@ void Buffer::insertChar(char ch) {
 void Buffer::deleteChar() {
     if (_x != 0 && !_currentLine->empty()) {
         _x--;
-        logger.info(_logHandle, std::format("Delete {} at ({}, {})", (*_currentLine)[_x], _x, _y));
+        Log::info(_logHandle, std::format("Delete {} at ({}, {})", (*_currentLine)[_x], _x, _y));
         mvdelch(_y, _x);
         _currentLine->erase(_currentLine->begin() + _x);
     }

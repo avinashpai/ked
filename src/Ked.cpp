@@ -1,20 +1,22 @@
-#include <format>
 #include <ncurses.h>
+
+#include <filesystem>
+#include <format>
 
 #include "Log.hpp"
 #include "Editor.hpp"
 
 
-Log logger {"Ked.log"};
-
-int main() {
-    //	std::string_view _logHandle = "Entry";
-    //	logger.info(_logHandle, "Starting Ked...\n");
+int main(int argc, char *argv[]) {
+    std::optional<std::string> filename = std::nullopt;
+    if (argc > 1) {
+        filename = std::move(argv[1]);
+    }
 
     // Init screen
     size_t y = 40, x = 178;
-    logger.info("Init", std::format("Screen size: ({}, {})", x, y));
+    Log::info("Init", std::format("Screen size: ({}, {})", x, y));
 
-    Editor keditor(y, x);
+    Editor keditor(y, x, filename);
     keditor.start();
 }
