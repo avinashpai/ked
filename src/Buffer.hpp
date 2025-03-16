@@ -71,3 +71,32 @@ public:
         return _mode;
     }
 };
+
+class BufferManager {
+    std::vector<std::shared_ptr<Buffer>> _buffers;
+    std::shared_ptr<Buffer> _activeBuf;
+
+public:
+    BufferManager() : _buffers{}, _activeBuf(nullptr) {}
+
+    void createBuffer(size_t yMax, size_t xMax, std::optional<std::string> filename = std::nullopt) {
+        _buffers.emplace_back(std::shared_ptr<Buffer>(new Buffer(yMax, xMax, filename)));
+        _activeBuf = _buffers.back();
+    }
+
+    bool handleInput(char ch) {
+        _activeBuf->handleInput(ch);
+
+        if (_activeBuf->getMode() == Mode::EXIT) {
+            _buffers.erase(_buffers.begin() + _activeBuf->getId());
+
+            if (!_buffers.empty()) {
+                _activeBuf = _buffers.front();
+            } else {
+                return false;
+            }
+        }
+
+        return true;
+    }
+};

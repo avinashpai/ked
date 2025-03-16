@@ -57,8 +57,12 @@ bool Buffer::saveToFile() const {
 }
 
 void Buffer::printBuffer() const {
-    for (auto line : _lines) {
-        addstr(line->data());
+    // TODO: Only print within bounds
+    // TODO: Scrolling
+
+    auto maxLines = std::min(_yMax, _lines.size());
+    for (size_t i = 0; i < maxLines; i++) {
+        addstr(_lines[i]->data());
     }
 }
 
@@ -91,6 +95,11 @@ void Buffer::handleNormalCmd(char ch) {
     using enum Mode;
 
     switch (ch) {
+        case 'a':
+            _mode = INSERT;
+            Log::info(_logHandle, "NORMAL -> INSERT (append)");
+            moveCursor(Direction::RIGHT); // TODO:
+            break;
         case 'i':
             _mode = INSERT;
             Log::info(_logHandle, "NORMAL -> INSERT");
@@ -106,6 +115,9 @@ void Buffer::handleNormalCmd(char ch) {
         case 'k':
         case 'l':
             moveCursor(Direction(ch));
+            break;
+        case 'x':
+            deleteChar();
             break;
         default:
             // TODO:
@@ -142,7 +154,8 @@ void Buffer::moveCursor(Direction ch) {
             break;
         case RIGHT:
             auto lineSize = _currentLine->size();
-            if (_x != _xMax && lineSize != 0  && _x != lineSize - 1) {
+            auto lineEnd = _mode == Mode::INSERT ? lineSize : lineSize - 1;
+            if (_x != _xMax && lineSize != 0  && _x != lineEnd) {
                 _x++;
             }
             break;
@@ -187,7 +200,9 @@ void Buffer::insertChar(char ch) {
 
 void Buffer::deleteChar() {
     if (_x != 0 && !_currentLine->empty()) {
-        _x--;
+        if (_mode == Mode::INSERT) {
+            _x--;
+        }
         Log::info(_logHandle, std::format("Delete {} at ({}, {})", (*_currentLine)[_x], _x, _y));
         mvdelch(_y, _x);
         _currentLine->erase(_currentLine->begin() + _x);

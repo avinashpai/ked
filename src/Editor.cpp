@@ -1,4 +1,5 @@
 #include "Editor.hpp"
+#include "Buffer.hpp"
 
 
 Editor::Editor(size_t yMax, size_t xMax, std::optional<std::string> fileOrDir) : _yMax(yMax), _xMax(xMax) {
@@ -6,8 +7,8 @@ Editor::Editor(size_t yMax, size_t xMax, std::optional<std::string> fileOrDir) :
     raw();
     noecho();
 
-    _buffers = { std::shared_ptr<Buffer>(new Buffer(_yMax, _xMax, fileOrDir)) };
-    _activeBuf = _buffers.front();
+    _bufferMgr = {};
+    _bufferMgr.createBuffer(yMax, xMax, fileOrDir);
 
     refresh();
 }
@@ -17,24 +18,9 @@ Editor::~Editor() {
 }
 
 void Editor::start() {
-    while (true) {
-        // TODO: Buffer switching
-
-        _activeBuf->handleInput(getch());
-
-        if (_activeBuf->getMode() == Mode::EXIT) {
-            _buffers.erase(_buffers.begin() + _activeBuf->getId());
-
-            if (!_buffers.empty()) {
-                _activeBuf = _buffers.front();
-            } else {
-                goto end;
-            }
-        }
-
+    while (_bufferMgr.handleInput(getch())) {
         refresh();
     }
-end:
     endwin();
 }
 
