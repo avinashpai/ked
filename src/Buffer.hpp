@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ncurses.h>
+
 #include <optional>
 #include <vector>
 
@@ -10,7 +12,7 @@ enum class Mode {
     EXIT
 };
 
-struct Line : std::vector<char> {
+struct Line : std::string {
     size_t size() {
         return std::ranges::count_if(*this, [](char ch){ return ch != '\n'; });
     }
@@ -25,13 +27,30 @@ class Buffer {
 
     std::optional<std::string> _filename;
 
+    WINDOW *_win;
+
     // Text
     std::vector<std::shared_ptr<Line>> _lines;
     std::shared_ptr<Line> _currentLine;
 
     // Current position
-    size_t _y = 0;
-    size_t _x = 0;
+    struct Position {
+        size_t x;
+        size_t y;
+
+        size_t xOffset;
+        size_t yOffset;
+
+        Position(size_t xBeg, size_t yBeg) : xOffset(xBeg), yOffset(yBeg) {}
+
+        constexpr size_t xActual() {
+            return x + xOffset;
+        };
+
+        constexpr size_t yActual() {
+            return y + yOffset;
+        };
+    } _pos;
 
     // Bounds
     size_t _yMax;
@@ -56,10 +75,11 @@ class Buffer {
     void moveCursor(Direction key);
     void insertChar(char ch);
     void deleteChar();
-    void insertNewline();
+    void createNewline();
 
 public:
-    Buffer(size_t yMax, size_t xMax, std::optional<std::string> filename = std::nullopt) ;
+    Buffer(WINDOW *win, std::optional<std::string> filename = std::nullopt) ;
+    ~Buffer();
 
     void handleInput(char ch);
 
@@ -70,6 +90,10 @@ public:
     Mode getMode() const {
         return _mode;
     }
+
+    WINDOW *getWindow() const {
+        return _win;
+    }
 };
 
 class BufferManager {
@@ -79,8 +103,8 @@ class BufferManager {
 public:
     BufferManager() : _buffers{}, _activeBuf(nullptr) {}
 
-    void createBuffer(size_t yMax, size_t xMax, std::optional<std::string> filename = std::nullopt) {
-        _buffers.emplace_back(std::shared_ptr<Buffer>(new Buffer(yMax, xMax, filename)));
+    void createBuffer(WINDOW *win, std::optional<std::string> filename = std::nullopt) {
+        _buffers.emplace_back(std::shared_ptr<Buffer>(new Buffer(win, filename)));
         _activeBuf = _buffers.back();
     }
 
@@ -98,5 +122,9 @@ public:
         }
 
         return true;
+    }
+
+    WINDOW *getActiveWindow() const {
+        return _activeBuf->getWindow();
     }
 };

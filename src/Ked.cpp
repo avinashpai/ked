@@ -14,7 +14,7 @@ int main(int argc, char *argv[]) {
     }
 
     // Init screen
-    size_t y = 40, x = 178;
+    size_t y = 25, x = 80;
     Log::info("Init", std::format("Screen size: ({}, {})", x, y));
 
     Editor keditor(y, x, filename);

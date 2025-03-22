@@ -7,9 +7,6 @@
 #include "Buffer.hpp"
 
 class Editor {
-    size_t _yMax;
-    size_t _xMax;
-
     BufferManager _bufferMgr;
 
 public:

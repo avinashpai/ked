@@ -7,9 +7,13 @@
 #include "Log.hpp"
 
 
-Buffer::Buffer(size_t yMax, size_t xMax, std::optional<std::string> filename): _yMax(yMax), _xMax(xMax), _mode(Mode::NORMAL) {
+Buffer::Buffer(WINDOW *win, std::optional<std::string> filename): _win(win), _pos(getbegx(win), getbegy(win)), _mode(Mode::NORMAL) {
     _id = Buffer::sId++;
     _logHandle = std::format("Buffer ({})", _id);
+
+    getmaxyx(_win, _yMax, _xMax);
+
+    Log::info(_logHandle, std::format("Created with window size ({}, {}) at ({}, {})", _xMax, _yMax, _pos.xOffset, _pos.yOffset));
 
     if (filename.has_value()) {
         _filename = std::move(filename);
@@ -19,7 +23,11 @@ Buffer::Buffer(size_t yMax, size_t xMax, std::optional<std::string> filename): _
     if (_lines.empty()) {
         _lines = { std::shared_ptr<Line>(new Line) };
     }
-    _currentLine = _lines[0];
+    _currentLine = _lines.front();
+}
+
+Buffer::~Buffer() {
+   delwin(_win);
 }
 
 void Buffer::loadFromFile() {
@@ -36,12 +44,12 @@ void Buffer::loadFromFile() {
     for (std::string line; std::getline(input, line); i++) {
         _lines.emplace_back(std::shared_ptr<Line>(new Line));
         std::copy(line.begin(), line.end(), std::back_inserter(*_lines[i]));
-        _lines[i]->emplace_back('\n');
+        *_lines[i] += '\n';
     }
     Log::info(_logHandle, std::format("Successfully loaded {}", *_filename));
 
     printBuffer();
-    move(_y, _x);
+    wmove(_win, _pos.yActual(), _pos.xActual());
 }
 
 bool Buffer::saveToFile() const {
@@ -52,6 +60,11 @@ bool Buffer::saveToFile() const {
     }
 
     // TODO: save file
+    std::ofstream output(*_filename);
+    for (auto line : _lines) {
+        output << line->data();
+    }
+
     Log::info(_logHandle, std::format("Saved to {}", *_filename));
     return true;
 }
@@ -61,8 +74,9 @@ void Buffer::printBuffer() const {
     // TODO: Scrolling
 
     auto maxLines = std::min(_yMax, _lines.size());
+    auto y = _pos.yOffset, x = _pos.xOffset;
     for (size_t i = 0; i < maxLines; i++) {
-        addstr(_lines[i]->data());
+        mvwaddstr(_win, y++, x, _lines[i]->data());
     }
 }
 
@@ -128,83 +142,97 @@ void Buffer::handleNormalCmd(char ch) {
 void Buffer::moveCursor(Direction ch) {
     using enum Direction;
 
+    size_t prevX = _pos.xActual();
+    size_t prevY = _pos.yActual();
     switch (ch) {
         case LEFT:
-            if (_x != 0) {
-                _x--;
+            if (_pos.x != 0) {
+                _pos.x--;
             }
             break;
         case DOWN:
-            if (_y != _yMax && _y != _lines.size() - 1) {
-                _y++;
-                _currentLine = _lines[_y];
+            if (_pos.y != _yMax && _pos.y != _lines.size() - 1) {
+                _pos.y++;
+                _currentLine = _lines[_pos.y];
 
                 auto lineSize = _currentLine->size();
-                _x = lineSize == 0 ? 0 : std::min(_x, lineSize - 1);
+                _pos.x = lineSize == 0 ? 0 : std::min(_pos.x, lineSize - 1);
             }
             break;
         case UP:
-            if (_y != 0) {
-                _y--;
-                _currentLine = _lines[_y];
+            if (_pos.y != 0) {
+                _pos.y--;
+                _currentLine = _lines[_pos.y];
 
                 auto lineSize = _currentLine->size();
-                _x = lineSize == 0 ? 0 : std::min(_x, lineSize - 1);
+                _pos.x = lineSize == 0 ? 0 : std::min(_pos.x, lineSize - 1);
             }
             break;
         case RIGHT:
             auto lineSize = _currentLine->size();
             auto lineEnd = _mode == Mode::INSERT ? lineSize : lineSize - 1;
-            if (_x != _xMax && lineSize != 0  && _x != lineEnd) {
-                _x++;
+            if (_pos.x != _xMax && lineSize != 0  && _pos.x != lineEnd) {
+                _pos.x++;
             }
             break;
     }
+ 
+    size_t newX = _pos.xActual();
+    size_t newY = _pos.yActual();
 
-    move(_y, _x);
-    Log::info(_logHandle, std::format("Moving to ({}, {})", _x, _y));
+    if (newX != prevX || newY != prevY) {
+        wmove(_win, newY, newX);
+        Log::info(_logHandle, std::format("Moving to ({}, {})", _pos.xActual(), _pos.yActual()));
+    }
 }
 
-void Buffer::insertNewline() {
-    _x = 0;
-    _y++;
+void Buffer::createNewline() {
+    _pos.x = 0;
+    _pos.y++;
+    Log::info(_logHandle, std::format("Creating newline at y={}", _pos.yActual()));
 
-    _lines.insert(_lines.begin() + _y, std::shared_ptr<Line>(new Line));
-    _currentLine = _lines[_y];
+    _lines.insert(_lines.begin() + _pos.y, std::shared_ptr<Line>(new Line));
+    _currentLine = _lines[_pos.y];
 }
 
 void Buffer::insertChar(char ch) {
-    if (_x == _xMax) {
-        insertNewline();
-    }
-
     // TODO: Scrolling
 
+    mvwinsch(_win, _pos.yActual(), _pos.xActual(), ch);
 
-    if (_x == _currentLine->size() ) {
-        addch(ch);
-    } else {
-        mvinsch(_y, _x, ch);
-        move(_y, _x+1); // FIX: Redo how we move, this is gross
-    }
-    _currentLine->insert(_currentLine->begin() + _x, ch);
+    _currentLine->insert(_currentLine->begin() + _pos.x, ch);
 
-    Log::info(_logHandle, std::format("Inserting \'{}\' at ({}, {})", ch, _x, _y));
+    Log::info(_logHandle, std::format("Inserting \'{}\' at ({}, {})", ch, _pos.xActual(), _pos.yActual()));
 
     if (ch == '\n') {
-        insertNewline();
+        createNewline();
     } else {
-        _x++;
+        _pos.x++;
+        if(_pos.x == _xMax - _pos.xOffset - 2) {
+            createNewline();
+        }
     }
+    wmove(_win, _pos.yActual(), _pos.xActual()); // FIX: Redo how we move, this is gross
 }
 
 void Buffer::deleteChar() {
-    if (_x != 0 && !_currentLine->empty()) {
+    if (_pos.x != 0 && !_currentLine->empty()) {
         if (_mode == Mode::INSERT) {
-            _x--;
+            _pos.x--;
         }
-        Log::info(_logHandle, std::format("Delete {} at ({}, {})", (*_currentLine)[_x], _x, _y));
-        mvdelch(_y, _x);
-        _currentLine->erase(_currentLine->begin() + _x);
+        Log::info(_logHandle, std::format("Delete {} at ({}, {})", (*_currentLine)[_pos.x], _pos.xActual(), _pos.yActual()));
+        mvwdelch(_win, _pos.yActual(), _pos.xActual());
+        _currentLine->erase(_currentLine->begin() + _pos.x);
+    } else if (!_lines.empty() && _currentLine != _lines.front()) {
+        _pos.y--;
+        _currentLine = _lines[_pos.y];
+        _pos.x = _currentLine->size();
+        wmove(_win, _pos.yActual(), + _pos.xActual());
+
+        // TODO: Move lines!
+
+        if (_pos.x == _xMax - _pos.xOffset - 1) {
+            deleteChar();
+        }
     }
 }
